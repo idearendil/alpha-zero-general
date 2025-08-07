@@ -5,6 +5,7 @@ import coloredlogs
 from Coach import Coach
 from othello.OthelloGame import OthelloGame as Game
 from othello.pytorch.NNet import NNetWrapper as nn
+from othello.pytorch.NNet_cpu import NNetWrapper as nn_cpu
 from utils import *
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ def main():
 
     log.info('Loading %s...', nn.__name__)
     nnet = nn(g)
+    nnet_cpu = nn_cpu(g)
 
     if args.load_model:
         log.info('Loading checkpoint "%s/%s"...', args.load_folder_file[0], args.load_folder_file[1])
@@ -43,7 +45,7 @@ def main():
         log.warning('Not loading a checkpoint!')
 
     log.info('Loading the Coach...')
-    c = Coach(g, nnet, args)
+    c = Coach(g, nnet, nnet_cpu, args)
 
     if args.load_model:
         log.info("Loading 'trainExamples' from file...")
