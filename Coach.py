@@ -11,8 +11,10 @@ from tqdm import tqdm
 from Arena import Arena
 from MCTS import MCTS
 
-log = logging.getLogger(__name__)
+import ray
+from Worker import Worker
 
+log = logging.getLogger(__name__)
 
 class Coach():
     """
@@ -26,7 +28,6 @@ class Coach():
         self.nnet_cpu = nnet_cpu
         self.pnet = self.nnet.__class__(self.game)  # the competitor network
         self.args = args
-        self.mcts = MCTS(self.game, self.nnet_cpu, self.args)
         self.trainExamplesHistory = []  # history of examples from args.numItersForTrainExamplesHistory latest iterations
         self.skipFirstSelfPlay = False  # can be overriden in loadTrainExamples()
 
@@ -77,17 +78,28 @@ class Coach():
         It then pits the new neural network against the old one and accepts it
         only if it wins >= updateThreshold fraction of games.
         """
+        # Ray 초기화
+        ray.init(ignore_reinit_error=True, num_gpus=1)
 
         for i in range(1, self.args.numIters + 1):
             # bookkeeping
             log.info(f'Starting Iter #{i} ...')
-            # examples of the iteration
+
             if not self.skipFirstSelfPlay or i > 1:
                 iterationTrainExamples = deque([], maxlen=self.args.maxlenOfQueue)
 
-                for _ in tqdm(range(self.args.numEps), desc="Self Play"):
-                    self.mcts = MCTS(self.game, self.nnet_cpu, self.args)  # reset search tree
-                    iterationTrainExamples += self.executeEpisode()
+                # run
+                log.info("Running self-play episodes in parallel...")
+
+                # worker 분배
+                eps_per_worker = self.args.numEps // self.args.numWorkers  # 총 100개 self-play
+
+                workers = [Worker.remote() for _ in range(self.args.numWorkers)]
+                futures = [w.run_episodes.remote(eps_per_worker) for w in workers]
+                results = ray.get(futures)
+
+                for result in results:
+                    iterationTrainExamples += result
 
                 # save the iteration examples to the history 
                 self.trainExamplesHistory.append(iterationTrainExamples)
@@ -127,7 +139,6 @@ class Coach():
                 log.info('ACCEPTING NEW MODEL')
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename=self.getCheckpointFile(i))
                 self.nnet.save_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
-                self.nnet_cpu.load_checkpoint(folder=self.args.checkpoint, filename='best.pth.tar')
 
     def getCheckpointFile(self, iteration):
         return 'checkpoint_' + str(iteration) + '.pth.tar'
@@ -157,3 +168,4 @@ class Coach():
 
             # examples based on the model were already collected (loaded)
             self.skipFirstSelfPlay = True
+        

@@ -6,6 +6,7 @@ from Coach import Coach
 from othello.OthelloGame import OthelloGame as Game
 from othello.pytorch.NNet import NNetWrapper as nn
 from othello.pytorch.NNet_cpu import NNetWrapper as nn_cpu
+
 from utils import *
 
 log = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ args = dotdict({
     'numMCTSSims': 25,          # Number of games moves for MCTS to simulate.
     'arenaCompare': 40,         # Number of games to play during arena play to determine if new net will be accepted.
     'cpuct': 1,
+    'numWorkers': 4,           # Number of parallel workers to use for self-play.
 
     'checkpoint': './temp/',
     'load_model': False,
